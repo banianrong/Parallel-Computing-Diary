@@ -65,7 +65,7 @@
 
 **查看OpenMP版本**
 
-- 使用**_OPENMP**宏定义
+- 使用 **_OPENMP** 宏定义
 
 **使用OpenMP编写第一个程序**
 
@@ -82,4 +82,4 @@ int main() {
 }
 ```
 
-我们一般通过**\#pragma omp parallel**指明并行部分
+我们一般通过 **\#pragma omp parallel** 指明并行部分
