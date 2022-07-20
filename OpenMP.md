@@ -7,6 +7,12 @@
 
 ## **OpenMP初见**
 
+### **OpenMP环境配置**
+笔者当初刚进入的时候，走了许多弯路，这里给出Dev-Cpp版本的OpenMP的环境配置
+
+点击**Tools**，再点击里面的**Complier Options**，在里面的**General**下的**Add the following commands when calling the compiler:**加入这段控制语句**-fopenmp**就可以在Dev-Cpp中编写omp程序
+
+
 ### **OpenMP作用**
 - 编译器指令(#pragma)、库函数、环境变量
 - 极大地简化了C/C++/Fortran多线程编程
@@ -56,3 +62,24 @@
 这些语句对于gcc编译器来说，不能进行正常的编译，直接会被忽视，并不会执行，因此这里不表
 
 总之，对于编译器来说如果不支持\#pragma指令则会直接将其忽视，并不会执行
+
+**查看OpenMP版本**
+
+- 使用**_OPENMP**宏定义
+
+**使用OpenMP编写第一个程序**
+
+```
+#include<stdio.h>
+#include<omp.h>
+
+int main() {
+  #pragma omp parallel
+  {
+    printf("Hello World\n");
+  }
+  return 0;
+}
+```
+
+我们一般通过**\#pragma omp parallel**指明并行部分
