@@ -16,19 +16,19 @@
 预处理指令
 - 设定编译器状态或指定编译器完成特定动作
   - 需要编译器支持相应功能，否则将被忽略
-
-` \#pragma once `
+  
+` #pragma once `
 
 该段代码实现的功能是头文件只被编译一次
 
 ```
-\#ifdef HEADER_H
+#ifdef HEADER_H
 
-\#define HEADER_H
+#define HEADER_H
 
 ...
 
-\#endif
+#endif
 ```
 
 上述代码实现的功能也是头文件只被编译一次
