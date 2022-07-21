@@ -131,4 +131,6 @@ int main() {
 |并行控制指令|功能|
 |:---------:|:--:|
 |`omp_get_num_threads`|返回当前并行区域中的活动线程个数，如果在并行区域外部调用，返回1|
-|`omp_get_thread_num`||
+|`omp_get_thread_num`|返回当前的线程号，注意不要和之前的omp_get_num_threads混肴|
+|`omp_set_num_threads`|设置进入并行区域时，将要创建的线程个数|
+|`omp_get_max_threads`|用于获得最大的线程数量，这个最大数量是指在不使用num_threads的情况下，OpenMP可以创建的最大线程数量。需要注意这个值是确定的，与它是否在并行区域调用没有关系|
