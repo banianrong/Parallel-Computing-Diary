@@ -111,3 +111,24 @@ int main() {
 #### **编译器指令**
 
 `#pragma omp parallel [clause[clause]...]{stuctured block}`
+
+- 指明并行区域及并行方式
+- 这里的clause是指明详细的并行参数，其大致分为
+  - 控制变量在线程间的作用域
+  - 显式指明线程数目
+  - 条件并行
+
+**num_threads(int)**
+- 用于指明线程数目
+- 当没有指明时，将默认使用OMP_NUM_THREADS环境变量
+  - 环境变量的值为系统运算核心数目(或超线程数目)
+  - 可以使用 `omp_set_num_threads(int)` 修改全局默认线程数，注意这需要在外面修改，在线程中修改笔者尝试后没有作用
+  - 可以使用omp_get_num_threads()获取当前设定的默认线程数
+  - num_threads(int)优先级高于环境变量，不保证创建指定数目的线程，会后到系统资源的限制
+
+这里做个区分
+
+|并行控制指令|功能|
+|:---------:|:--:|
+|`omp_get_num_threads`|返回当前并行区域中的活动线程个数，如果在并行区域外部调用，返回1|
+|`omp_get_thread_num`||
