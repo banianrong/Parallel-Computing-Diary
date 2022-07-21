@@ -95,3 +95,19 @@ int main() {
 **同一线程的多个语句一般情况下并不是连续执行，其中可能有其他线程加入，导致该线程阻塞。**
 
 **OpenMP运行机制**
+
+- 使用分叉(fork)与交汇(join)模型
+
+**fork** : 由主线程(master thread)创建一组从线程(slave threads)
+- 主线程编号永远为0(thread 0)
+- 不保证执行顺序
+
+**join** : 同步终止所有线程并将控制权转移回至主线程
+
+> fork是各奔东西，join是百川入海
+
+### **OpenMP语法**
+
+#### **编译器指令**
+
+`#pragma omp parallel [clause[clause]...]{stuctured block}`
