@@ -134,3 +134,35 @@ int main() {
 |`omp_get_thread_num`|返回当前的线程号，注意不要和之前的omp_get_num_threads混肴|
 |`omp_set_num_threads`|设置进入并行区域时，将要创建的线程个数|
 |`omp_get_max_threads`|用于获得最大的线程数量，这个最大数量是指在不使用num_threads的情况下，OpenMP可以创建的最大线程数量。需要注意这个值是确定的，与它是否在并行区域调用没有关系|
+
+### **并行for循环**
+
+```
+#pragma omp parallel
+{
+  int n;
+  for(n = 0; n < 4; n++) {
+    int thread = omp_get_thread_num();
+    printf("thread %d\n", thread);
+  }
+}
+```
+
+该段语句是每个线程都执行了一次该循环体中的内容，也就是最后的结果会发现每个线程都执行了四次`printf("thread %d\n", thread)`语句。
+
+如果想要将循环中的迭代分配到多个线程并行，有两种方式，
+
+**方式1**
+```
+#pragma omp parallel
+{
+  int n;
+  #pragma omp for
+  for(n = 0; n < 4; n++) {
+    int thread = omp_get_thread_num();
+    printf("thread %d]n", thread);
+  }
+}
+```
+在并行区域内加入`#pragma omp for`
+注意：在并行区域内，for循环外还可以加入其他并行代码
