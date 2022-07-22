@@ -330,4 +330,52 @@ for(int i = 0; i < 1000; i++) {
   - 先运行至栅障点处的线程必须等待其他线程
   - 常用来等待某部分任务完成再开始下一部分任务
   - 每个并行区域的结束点默认自动同步线程
-  
+
+```
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<time.h>
+#include<omp.h>
+
+int main() {
+  srand(time(NULL));
+  int total = 0;
+  int histogram[20];
+  memset(histogram, 0, sizeof(histogram));
+  #pragma omp parallel num_threads(20)
+  {
+    for(int i = 0; i < 50; i++) {
+      int value = rand()%20;
+      #pragma omp atomic
+      histogram[value]++;
+    }
+
+    int thread = omp_get_thread_num();
+    #pragma omp atomic
+    total += histogram[thread];
+  }
+  return 0;
+}
+```
+
+这里如果没有加入栅障指令，那么最后统计的total一般不是1000，造成数据丢失，因为不能保证执行到`total += histogram[thread]`对应的数字已经全部统计完毕，其他线程可能仍然在统计
+
+修改方案如下：
+
+```
+int total = 0;
+
+#pragma omp parallel num_threads(20)
+{
+  for(int i = 0; i < 50; i++) {
+    int value = rand()%20;
+    #pragma omp atomic
+    histogram[value]++;
+  }
+  #pragma omp barrier//保证执行到下一个语句之前，所有的线程都已经统计完毕了随机数的次数
+  int thread = omp_get_thread_num();
+  #pragma omp atomic
+  total += histogram[thread];
+}
+```
