@@ -213,3 +213,83 @@ OpenMP中的每个线程同样可以被并行化为一组线程
   ```
 
 ## **线程互动与同步**
+
+- OpenMP是多线程共享地址架构
+  - 线程可通过共享变量通信
+- 线程及其语句执行具有不确定性
+  - 共享数据可能造成竞争条件(race condition)
+  - 竞争条件:程序运行的结果依赖于不可控的执行顺序(此时结果是不可测的，即不同的线程执行顺序会有不同的结果)
+- 必须使用同步机制避免竞争条件的出现
+  - 同步机制将带来巨大开销
+  - 尽可能改变数据的访问方式减少必须的同步次数
+
+### **高级语言的语句并非原子操作**
+比如count++并不是只有一个子操作，而是返回count值后再进行++操作。
+
+对于count++其所包含的操作如下
+```
+LOAD Reg, count
+ADD #1
+STORE Reg, count
+```
+
+包含三个子操作，如果一个线程负责count++，另一个线程负责count--，那么就有可能出现下面的情况(竞争条件)
+
+```
+        thread 1        thread 2
+          Reg    count    Reg
+  LOAD     10     10    
+  ADD      11     10  
+           11     10       10    LOAD
+           11     10        9    SUB
+           11      9        9    STORE
+  STORE    11     11
+```
+
+同样如果上述的模板中thread 1执行的是count--，而thread 2执行的是count++，那么最终count存储的是9，这样子就会因为执行顺序不同而造成不同的结果
+
+### **临界区(critical section)**
+
+`#pragma omp critical`
+- 指的是一个访问共用资源(例如：共用设备或是共用存储器)的程序片段，而这些共用资源又无法同时被多个线程访问的特性
+  - 同一时间内只有一个线程能执行临界区内代码
+  - 其他线程必须等待临界区内线程执行完毕后才能进入临界区
+  - 常用来保证对共享数据的访问之间互斥
+
+  如果具有竞争条件，那么就可以使用临界区来保证结果的正确，此时被`#pragma omp critical`修饰的代码段对于每个线程来说此时里面的资源是它独占的，其他线程无权访问修改，因此可以消除竞争条件带来的不确定性
+
+  ```
+  #pragma omp parrallel for
+  for(int i = 0; i < 1000; i++) {
+    int value = rand()%20;
+    histogram[value]++;
+  }
+  int total = 0;
+  for(int i = 0; i < 20; i++) {
+    total +== histogram[i];
+    cout << histogram[i] << endl;
+  }
+  cout << "total:" << total << endl;
+  ```
+
+  本段代码的输出未必是1000，原因可以参考前面的count++，++并非原子操作，因此多线程使用的时候会形成竞争条件，导致最后的存储除了问题
+
+****
+  解决方案（添加临界区）：
+
+  ```
+  #pragma omp parallel for
+  for(int i = 0; i < 1000; i++) {
+    int value = rand()%20;
+    #pragma omp critical
+    {
+      histogram[value]++;
+    }
+  }
+  int total = 0;
+  for(int i = 0; i < 20; i++) {
+    total += histogram[i];
+    cout << histogram[i] << endl;
+  }
+  cout << "total:" << total << endl;
+  ```
