@@ -293,3 +293,21 @@ STORE Reg, count
   }
   cout << "total:" << total << endl;
   ```
+
+### **原子(atomic)操作**
+`#pragma omp atomic`
+- 保证对内存的读写更新等操作在同一时间只能被一个线程执行
+  - 常用来做计数器、求和等
+- 原子操作通常比临界区执行更快
+  - 不需要阻塞其他线程
+- 临界区的作用范围更广，能够实现的功能更复杂
+
+代码演示如下：
+```
+#pragma omp parallel for
+for(int i = 0; i < 1000; i++) {
+  int value = rand()%20;
+  #pragma omp atomic
+  histogram[value]++;
+}
+```
