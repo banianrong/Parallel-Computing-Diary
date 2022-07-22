@@ -166,3 +166,27 @@ int main() {
 ```
 在并行区域内加入`#pragma omp for`
 注意：在并行区域内，for循环外还可以加入其他并行代码
+
+**方式2**
+```
+int n;
+#pragma omp parallel for
+for(n = 0; n < 4; n++) {
+  int thread = omp_get_thread_num();
+  printf("thread %d\n", thread);
+}
+```
+合并为`#pragma omp parallel for`，这样子写法更加简洁
+
+### **嵌套并行**
+
+OpenMP中的每个线程同样可以被并行化为一组线程
+- OpenMP默认关闭嵌套，即默认情况下一个线程不能并行化为一组线程，需要使用`omp_set_nested(1)`打开
+- 嵌套并行仍然是fork-join模型，注意无论什么时候，主线程的编号一定是**0**
+
+### **语法限制**
+当循环分配并行的时候，有下列限制：
+
+- 不能使用!=作为判断条件(接受<,<=,>,>=)
+- 循环必须为单入口单出口(也就是不能使用break，goto等跳转语句)
+ 
