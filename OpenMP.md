@@ -440,3 +440,15 @@ int total = 0;
 > single独乐乐，master众乐乐
 
 ### **并行Reduction**
+指明如何将线程局部结果汇总
+
+- `#pragma omp for reduction(+:total)`
+- 支持的操作，八大金刚
+  1. `+`
+  2. `-`
+  3. `*`
+  4. `&`
+  5. `|`
+  6. `&&`
+  7. `||`
+  8. `^`
