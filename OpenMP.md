@@ -379,3 +379,23 @@ int total = 0;
   total += histogram[thread];
 }
 ```
+
+这里给出`#pragma omp for`的一些相似之处
+
+```
+int total = 0;
+
+#pragma omp parallel num_threads(20)
+{
+  #pragma omp for
+  for(int i = 0; i < 1000; i++) {
+    int value = rand()%20;
+    #pragma omp atomic
+    histogram[value]++;
+  }
+  int thread = omp_get_thread_num();
+  #pragma omp atomic
+  total += histogram[thread];
+}
+```
+这里的for分配出来的结果仍然是1000，也就是说`#pragma omp for`也是等到最后的线程执行完循环才进行下一步任务，前面先完成的线程会进入等待状态。注意如果修改成`#pragma omp for nowait`，那么结果就会不确定，因为此时先完成的线程不会再等待了。
