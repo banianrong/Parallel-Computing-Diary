@@ -452,3 +452,36 @@ int total = 0;
   6. `&&`
   7. `||`
   8. `^`
+
+```
+#include<string.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<omp.h>
+#include<time.h>
+
+int main() {
+  int total = 0;
+  int histogram[20];
+  memset(histogram, 0, sizeof(histogram));
+  #pragma omp parallel
+  {
+    #pragma omp for
+    for(int i = 0; i < 1000; i++) {
+      int value = rand()%20;
+      #pragma omp atomic
+      histogram[value]++;
+    }
+    #pragma omp for reduction(+:total)
+    for(int i = 0; i < 20; i++) {
+      total += histogram[i];
+    }
+  }
+  printf("%d\n", total);
+  return 0;
+}
+```
+
+reduction指令就是指明如何将线程局部结果汇总，原先没有reduction限制的时候，total是每个线程共享的，也就是所有的线程都可以访问修改total的值。但是加入reduction限制后，每个线程的total都是独属于该线程的全新total，线程1和线程2的total没有关系，也就是线程1的total的值改变了，不会影响到线程2的total的值。这样每个线程都有自己独特的total，等到所有线程结束完成之后，再根据reduction后面所给的操作符，将所有线程的total经过该运算储存到原来的total中。
+
+## **变量作用域**
