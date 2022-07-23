@@ -485,3 +485,12 @@ int main() {
 reduction指令就是指明如何将线程局部结果汇总，原先没有reduction限制的时候，total是每个线程共享的，也就是所有的线程都可以访问修改total的值。但是加入reduction限制后，每个线程的total都是独属于该线程的全新total，线程1和线程2的total没有关系，也就是线程1的total的值改变了，不会影响到线程2的total的值。这样每个线程都有自己独特的total，等到所有线程结束完成之后，再根据reduction后面所给的操作符，将所有线程的total经过该运算储存到原来的total中。
 
 ## **变量作用域**
+
+### **OpenMP与串行程序的作用域不同**
+- OpenMP中必须指明变量为**shared**或**private**
+
+|Shared|Private|
+|:----:|:-----:|
+|变量为所有线程所共享|变量为线程私有，其他线程无法访问|
+|并行区域外定义的变量默认为shared|并行区域内定义的变量默认为private|
+||循环计数器默认为private|
