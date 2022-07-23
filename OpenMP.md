@@ -494,3 +494,28 @@ reduction指令就是指明如何将线程局部结果汇总，原先没有reduc
 |变量为所有线程所共享|变量为线程私有，其他线程无法访问|
 |并行区域外定义的变量默认为shared|并行区域内定义的变量默认为private|
 ||循环计数器默认为private|
+
+```
+int histogram[20];//histogram是shared
+memset(histogram, 0, sizeof(histogram));
+int total = 0;//total是shared
+
+int i,j;
+#pragma omp parallel for
+for(i = 0; i < 1000; i++) {//循环计数器i是private，虽然定义在并行区域外部
+  int value = rand()%20;
+  #pragma omp atomic
+  histogram[value]++;
+  for(j = 0; j < 1000; j++) {//循环计数器j也是private
+    ...
+  }
+}
+```
+
+### **显式作用域定义**
+- 显式指明变量的作用域
+- `shared(var)`
+  - 指明变量**var**为**shared**
+- `default(none/shared/private)`
+  - 指明变量的默认作用域
+  - 如果为**none**则必须指明并行区域内每一变量的作用域
