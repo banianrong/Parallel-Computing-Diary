@@ -398,4 +398,45 @@ int total = 0;
   total += histogram[thread];
 }
 ```
-这里的for分配出来的结果仍然是1000，也就是说`#pragma omp for`也是等到最后的线程执行完循环才进行下一步任务，前面先完成的线程会进入等待状态。注意如果修改成`#pragma omp for nowait`，那么结果就会不确定，因为此时先完成的线程不会再等待了。
+这里的for分配出来的结果仍然是1000，也就是说`#pragma omp for`也是等到最后的线程执行完循环才进行下一步任务，前面先完成的线程会进入等待状态。注意如果修改成`#pragma omp for nowait`，那么结果就会不确定，因为此时先完成的线程不会再等待了(产生了一个隐式栅障，但是nowait可以去除)。
+
+### **single & master**
+
+`#pragma omp single{}`
+- 用于保证{}内的代码由一个线程完成
+- 常用于输入输出或初始化
+- 由第一个执行至此处的线程执行
+- 同样会产生一个隐式栅障
+  - 可由`#pragma omp single nowait`去除
+
+`#pragma omp master{}`
+- 与single相似，但指明由主线程执行
+- 与使用if的条件并行等价
+  - `#pragma omp parallel IF(omp_get_thread_num() == 0) nowait`，这边的话，笔者暂时没有找到相关的资料，不过可以理解为只有主线程执行该代码块，而其他线程直接跳过，可以执行后面的任务。
+  - 默认不产生隐式栅障
+
+`#pragma omp master`使用如下
+```
+int total = 0;
+#pragma omp parrallel
+{
+  #pragma omp for
+  for(int i = 0; i < 1000; i++) {
+    int value = rand()%20;
+    #pragma omp atomic
+    histogram[value]++;
+  }  
+  #pragma omp master
+  {
+    for(int i = 0; i < 20; i++) {
+      total += histogram[i];
+    }
+  }
+}
+```
+
+注意single会产生栅障，但是master不会
+
+> single独乐乐，master众乐乐
+
+### **并行Reduction**
