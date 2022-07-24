@@ -661,18 +661,22 @@ int main() {
 
 总的来说`auto`和`runtime`其实最后都是在`static`,`dynamic`,`guided`中挑选一个策略。所以理解这三种调度方式最为重要。
 
-**static**
+#### **static**
+
 - `#pragma omp parallel for schedule(static)`
   - 没有指定chunk size的参数，那么默认就是迭代数除以线程总数作为size，然后给每个线程分配这么多的任务
 - `#pragma omp parallel for schedule(static, 5)`
   - 指定了size的大小，那么就是每次给线程的任务大小就是size，注意这边每个线程执行的总任务数仍然是相等的，只不过一次执行的块的大小变化了(size小的时候)，如果size过大，那么就会产生某个线程执行了非常多的任务，而其他线程执行很少或者不执行的现象。
-**dynamic**
+
+#### **dynamic**
+
 - `#pragma omp parallel for schedule(dynamic)`
   - 没有指定size，size默认为1，也就是此时每个任务块蕴含的任务数量为1，然后逐个分配给所有线程，运行快的线程可以先接收下一个任务，实现任务的动态分配。
 - `#pragma omp parallel for schedule(dynamic, 5)`
   - 指定了size的大小，与不指定的区别只在于此时一个任务块含有的任务数量为5，每次调度都是5，而不是1
 
-**guided**
+#### **guided**
+
 - `#pragma omp parallel for schedule(guided)`
   - 没有指定size的情况下，默认为1，与 dynamic类似，不过此时分配的任务数量不是固定不变，而是一开始很多，然后逐渐减小，但是不会小于chunk size的数量
 - `#pragma omp parallel for schedule(guided, 5)`
