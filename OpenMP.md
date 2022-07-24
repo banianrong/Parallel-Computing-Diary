@@ -571,3 +571,65 @@ for(i = 0; i < 1000; i++) {//循环计数器i是private，虽然定义在并行�
   printf("i = %d\n", i);
   ```
   这边会发现程序运行的结果，i的结果和最后一个线程，在这边是线程3中的i一致。所以我们可以得出`lastprivate(var)`的功能就是将最后一个线程中的变量的值在join后赋值给原先主线程的。
+
+### **数据并行和任务并行**
+
+**数据并行**
+- 同样指令作用在不同数据上
+- 之前所举的例子都是数据并行
+
+**任务并行**
+- 线程可能执行不同任务
+  - `#pragma omp section`
+- 每个section由一个线程完成
+- 同样有隐式栅障(可使用nowait去除)
+
+```
+#paragma omp parallel
+
+#pragma omp sections
+{
+  #pragma omp section
+  task_A();
+  #pragma omp section
+  task_B();
+  #pragma omp section
+  task_C();
+}
+```
+
+`#pragma omp sections`的语法如上，此时里面的每个`#pragma omp section`都只会由一个线程来执行，如果没有加`nowait`，那么直到最后一个任务完成，所有的线程才能继续往下，否则将在这里等待，换句话说`sections`指令有隐式栅障。自测程序如下，加上**nowait**和不加输出结果是不同的。
+
+```
+#include<stdio.h>
+#include<omp.h>
+
+int main() {
+  #pragma omp parallel
+  {
+  	#pragma omp sections //nowait//这里证明了sections自带隐式栅障
+  	{
+  	  #pragma omp section
+	  {
+	    int thread = omp_get_thread_num();
+		printf("Thread %d : tastk 1\n", thread);
+	  }
+	  #pragma omp section
+	  {
+	  	int thread = omp_get_thread_num();
+	  	printf("Thread %d : task 2\n", thread);
+	  }
+	  #pragma omp section
+	  {
+	  	int thread = omp_get_thread_num();
+	  	printf("Thread %d : task 3\n", thread);
+	  }
+	}
+	int thread = omp_get_thread_num();
+	printf("Thread %d : task 4\n", thread);
+  }
+  return 0;
+}
+```
+
+## **线程调度**
