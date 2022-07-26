@@ -457,3 +457,138 @@ Hello World from process 3 of 4
 |:--:|:--:|
 |`MPI_Init`|用来初始化MPI执行环境，建立多个MPI之间的联系，为后续通信做准备|
 |`MPI_Finalize`|结束MPI执行环境|
+
+MPI_Init和MPI_Finalize配套使用，用来定义mpi程序的并行区。一般只有在这两个定义的区域之内调用mpi函数，同时配套使用。
+
+如果在并行区域之外有其他的行为执行，那么不同于OpenMP，大部分MPI实现 会在各个并行进程之间独立地执行相应地代码。
+
+```
+#include"mpi.h"
+#include<stdio.h>
+
+int main() {
+  MPI_Init(NULL, NULL);
+  MPI_Finalize();
+  printf("Hello World\n");
+  return 0;
+}
+
+/*
+output:
+Hello World
+Hello World
+Hello World
+Hello World
+*/
+```
+
+- C语言中的MPI_Init需要提供argc和argv参数，如果没有，写成NULL就可以了，二MPI_Finalize函数不需要提供参数。二者的返回值都是int类型，标识函数是否调用成功。
+
+- 总的来说就是一下的调用形式
+  - `MPI_Init(&argc, &argv);`
+  - `MPI_Init(NULL, NULL);`
+  - `MPI_Finalize();`
+
+
+- #### **MPI_Comm_rank**
+
+MPI_Comm_rank就是表示各个MPI进程的，使用的时候需要提供两个函数参数：
+
+  - MPI_Comm类型的通信域，标识参与计算的MPI进程组。**MPI_COMM_WORLD**是MPI实现预先定义好的进程组，指的是所有MPI进程所在的进程组，如果想要申请自己的进程组，则需要通过MPI_Comm定义并通过其他MPI函数生成。
+  - 整型指针，返回进程在相应进程组中的进程号。即需要将rank存放的地址了，本质上可以认为同scanf的参数类似
+  - MPI还会预先定义一个进程组MPI_COMM_SELF，只包含自己的进程组，因此里面的编号都是0
+
+```
+#include<stdio.h>
+#include"mpi.h"
+
+int main() {
+  int r1, r2;
+  MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &r1);
+    MPI_Comm_rank(MPI_COMM_SELF, &r2);
+    printf("%d %d\n", r1, r2);
+  MPI_Finalize();
+  return 0;
+}
+```
+
+- #### **MPI_Comm_size**
+
+本函数表示相应进程组之间有多少个进程。其返回的也是整型值，同样需要两个参数：
+
+- MPI_Comm类型的通信域，标识参与计算的MPI进程组，与上面类似，这里就是MPI_COMM_WORLD
+
+- 整型指针，返回相应进程组中的进程数
+
+```
+#include<stdio.h>
+#include"mpi.h"
+
+int main() {
+  int r1, r2, s1, s2;
+  MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &r1);
+    MPI_Comm_rank(MPI_COMM_SELF, &r2);
+    MPI_Comm_size(MPI_COMM_WORLD, &s1);
+    MPI_Comm_size(MPI_COMM_SELF, &s2);
+    printf("world %d of %d, self %d of %d\n", r1, s1, r2, s2);
+  MPI_Finalize();
+  return 0;
+}
+```
+
+### **MPI的点对点通信**
+
+点对点通信时MPI编程的基础。接下来将引入两个重要的MPI函数`MPI_Send`和`MPI_Recv`
+
+先给代码，注意这边的如果格式化(printf)的`%d %s`之类的漏掉的话，会发生通信错误。
+
+```
+#include"mpi.h"
+#include<stdio.h>
+#include<string.h>
+
+#define BUFLEN 512
+
+int main(int argc, char* argv[]) {
+  int myid, numprocs, next, namelen;
+  char buffer[BUFLEN], processor_name[MPI_MAX_PROCESSOR_NAME];
+  MPI_Status status;
+  MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Get_processor_name(processor_name, &namelen);
+
+    printf("Process %d on %s\n", myid, processor_name);
+    printf("Process %d of %d\n", myid, numprocs);
+    memset(buffer, 0, BUFLEN*sizeof(char));
+    if(myid == numprocs-1)
+      next = 0;
+    else
+      next = myid+1;
+    if(myid == 0)
+    {
+        strcpy(buffer, "hello there");
+        printf("%d sending '%s'\n", myid, buffer);
+        fflush(stdout);
+        MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD);
+        printf("%d reveiving\n", myid);
+        fflush(stdout);
+        MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);
+        printf("%d received '%s'\n", myid, buffer);
+        fflush(stdout);
+    }else{
+        printf("%d receiving\n", myid);
+        fflush(stdout);
+        MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);
+        printf("%d received '%s'\n", myid, buffer);
+        fflush(stdout);
+        MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD);
+        printf("%d sent '%s'\n", myid, buffer);
+        fflush(stdout);
+    }
+    MPI_Finalize();
+    return 0;
+}
+```
