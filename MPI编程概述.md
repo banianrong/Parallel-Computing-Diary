@@ -287,7 +287,7 @@ Hello World! Process3of4 on ...
 
 #### **运行自己的第一个mpi程序**
 
-拷贝下面程序，然后在dev运行，记着是点击**Tools**，然后选择里面的**Package Manager**，点击自己刚刚搭建的**MPI RUN FOR 4**，就可以测试自己的mpi环境搭建的如何了。
+拷贝下面程序，然后在dev运行，注意先编译，然后点击**Tools**，然后选择里面的**Package Manager**，点击自己刚刚搭建的**MPI RUN FOR 4**，就可以测试自己的mpi环境搭建的如何了。
 
 ```
 #include <iostream>
@@ -324,3 +324,136 @@ Hello World! Process3of4 on ...
 ```
 
 这里的`...`每个人可能不一样，应该是硬件的一种编号，大致类似就可以了。接下来就可以mpi的探索之旅啦。
+
+## **MPI编程基础**
+
+开始MPI语法的学习苦旅
+
+### **关于`int main(int argc, char* argv[])`的解释**
+
+注意main函数本质上只是一个程序执行的入口而已，平常我们使用scanf函数之类的，都是在执行的时候传入参数，那么有没有方法在程序启动的时候就传递参数呢，这里我们就要用到`int main(int argc, char* argv)`
+
+#### **argc参数和argv参数**
+
+```
+#include<stdio.h>
+
+int main(int argc, char* argv[]) {
+  printf("argc = %d\n", argc);
+  printf("%s\n", *argv);
+}
+```
+
+运行上面的程序，我们会发现这边的结果为
+
+```
+argc = 1
+C:/.../Untitled1.exe
+```
+
+argc代表了我们的命令行有`1`个字符串，而这个字符串就是`C:/.../Untitled1.exe`
+
+所有我们就可以通过argc和argv这样的关系来进行命令行的输入
+
+#### **传递参数的方法**
+
+通过下面的格式传递：
+
+`程序名.exe 字符串1 字符串2 ...`
+
+```
+#include<stdio.h>
+#include<string.h>
+
+int main(int argc, char* argv[]) {
+  printf("argc = %d\n", argc);
+
+  argv++;
+  while(*argv) {
+  	if(strcmp(*argv, "a") == 0) {
+  		argv++;
+  		printf("a\n");
+	}else{
+	    argv++;
+	    printf("wrong\n");
+	}
+  }
+  return 0;
+}
+```
+
+输入以上程序，编译，假设此时产生的可执行文件叫做`a.exe`，那么注意此时是唤出cmd窗口，找到这个文件所在的位置，然后输入
+
+`a.exe a A w`
+
+就会得到一下的输出
+
+```
+argc = 4
+a
+wrong
+wrong
+```
+
+所以如果需要程序带参数地启动的时候，就是用`int main(int argc, char* argv[])`，仅此而已。
+
+### **MPI程序引入**
+
+仍然是**Hello World**
+
+```
+#include<stdio.h>
+#include "mpi.h"
+
+int main(int argc, char* argv[]) {
+  int rank;
+  int size;
+  MPI_Init(&argc, &argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  printf("Hello World from process %d of %d\n", rank, size);
+  MPI_Finalize();
+  return 0;
+}
+```
+
+这里不使用argc，argv也是可以的
+
+```
+#include<stdio.h>
+#include "mpi.h"
+
+int main() {
+  int rank;
+  int size;
+  MPI_Init(NULL, NULL);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  printf("Hello World from process %d of %d\n", rank, size);
+  MPI_Finalize();
+  return 0;
+}
+```
+
+这里运行的结果是：
+
+```
+Hello World from process 2 of 4
+Hello World from process 1 of 4
+Hello World from process 0 of 4
+Hello World from process 3 of 4
+```
+
+这里笔者是4个进程，分别打印他们各自的编号，注意这边的顺序有很多种，并没有固定的顺序，因为他们是并行的，谁快，谁就先占用打印设备，仅此而已。
+
+### **MPI四大护法**
+
+首先，想要运行mpi，很明显
+`#include"mpi.h"`是显然必要的。
+
+- #### **MPI_Init和MPI_Finalize**
+
+|函数|作用|
+|:--:|:--:|
+|`MPI_Init`|用来初始化MPI执行环境，建立多个MPI之间的联系，为后续通信做准备|
+|`MPI_Finalize`|结束MPI执行环境|
