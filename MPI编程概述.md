@@ -592,3 +592,184 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 ```
+
+这里笔者的输出为
+
+```
+Process 2 on ...
+Process 2 of 4
+2 receiving
+Process 0 on ...
+Process 0 of 4
+0 sending 'hello there'
+Process 1 on ...
+Process 1 of 4
+1 receiving
+Process 3 on ...
+Process 3 of 4
+3 receiving
+0 reveiving
+1 received 'hello there'
+1 sent 'hello there'
+2 received 'hello there'
+2 sent 'hello there'
+3 received 'hello there'
+3 sent 'hello there'
+0 received 'hello there'
+```
+
+接下来逐步拆解上面的程序
+
+#### **四剑客**
+
+```
+MPI_Init(&argc, &argv);
+MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+MPI_Get_processor_name(processor_name, &namelen);
+```
+
+这四个语句所执行的都是初始化操作，其中一个新成员`MPI_Get_processor_name`是用来取得运行本进程的机器名称，该名称放在processor_name中，其长度为namelen，同时`MPI_MAX_PROCESSOR_NAME`是记录机器名的最大长度的。
+
+##### **MPI_Get_processor_name**
+
+- 注意`MPI_Get_processor_name`的用法。
+
+- `MPI_Get_processor_name(processor_name, &namelen)`
+
+这里后面的代码
+
+```
+if(myid == numprocs - 1)
+    next = 0;
+else
+    next = myid + 1;
+```
+
+目的是为了告诉进程号他们下一个进程号是多少，注意这是一个循环，最后一个进程号的下一个进程号是0。所以这里的代码也可以是`next = (myid + 1) % numprocs;`，至于写哪一种就看各自的选择了。
+
+##### **fflush**
+
+如今windows下的stdout变成及时输出，所以一般来说适用不适用fflush也看不出太大的区别了。
+
+注意，平时使用的printf函数并不是直接打印到屏幕上，而是先发送到stdout(此时的stdout类似缓冲区)中，再由stdout发送到屏幕上。
+
+那么假设现在stdout直到遇到`\n`才会进行打印输出，那么假设进程1发送`hello`给到stdout，然后这时候切换到进程2，进程2发送`hello world\n`给stdout，此时打印到屏幕上的就是
+
+`hellohello world`
+
+很明显第一个明明是进程1的，但是在我们看来是执行进程2打印出来的，为了解决这个问题，我们就要使用`fflush(stdout)`，它的作用就是立即将所有内容发送到指定输出设备上(清空缓冲区)。一般在多线程的输出中使用。
+
+接下来主角登场
+
+#### **MPI_Send**
+
+- `MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD);`
+- MPI_Send函数的标准形式是
+`int MPI_SEND(buf, count, datatype, dest, tag, comm)`
+
+其中，输入参数包括：
+
+|输入参数|作用|
+|:-----:|:--:|
+|`buf`|发送缓冲区的起始地址，可以是各种数组或结构的**指针**|
+|`count`|整型，发送的数据个数，应为非负整数(感觉类似指针的偏移量)|
+|`datatype`|发送数据的数据类型|
+|`dest`|应该为整数，表示目的进程号，即destination|
+|`tag`|应该为整数，消息标志|
+|`comm`|MPI进程组所在的通信域(应该是发送的哪个进程号所在的通信域)|
+
+- 该函数的作用就是向通信域comm中的dest进程发送数据。消息数据存放在buf中，类型是datatype，个数是count个。这个消息的标志是tag，用以和本进程向同意目的进程发送的其他消息区别开来。
+
+对于具体的`MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD)`的解释
+
+在通信域MPI_COMM_WORLD内，向进程号next发送信息。发送的是buffer里面的所有数据，数据类型就是MPI_CHAR(因为buffer存储的是char类型的数据，MPI_CHAR是MPI的预定义数据类型，和char一一对应)，MPI_Send的参数都是输入参数，没有输出参数
+
+#### **MPI_Recv**
+
+- `MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);`
+- MPI_Recv的标准形式就是：`int MPI_Recv(buf, count, datatype, source, tag, comm, status);`
+- MPI_Recv中的buffer和status是输出参数，其他的都是输入参数
+
+其中的参数包括：
+
+|参数类型|作用|
+|:------:|:--:|
+|`buf`|接收缓冲区的起始地址，可以是各种数组或结构的**指针**，为输出参数|
+|`status`|MPI_Status结构指针，返回状态信息，为输出参数|
+|`count`|整数，最多可接收的数据个数|
+|`datatype`|接收数据的数据类型|
+|`source`|整型，接受数据的来源即发送数据进程号|
+|`tag`|整数，消息标识，应与相应的发soon给操作消息标识相同。|
+|`comm`|本进程(消息接收进程)和消息发送进程所在的通信域|
+
+对于`MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);`的解释：
+
+在通讯域MPI_COMM_WORLD中，0号进程(假设是0)从任意进程(MPI_ANY_SOURCE表示接受任意进程发来的消息)，接收的标签号是99，而且不超过512个MPI_CHAR类型数据，保存到buffer中。
+
+注意缓冲区buf的大小，不能小于发送过来的有效消息长度，否则可能由于数组越界导致程序错误(段错误)
+
+##### **MPI_Status**
+- MPI_Status是MPI中一个特殊的，也是比较有用的结构。MPI_Status的结构定义如下：
+
+```
+typedef struct MPI_Status {
+  int count;
+  int cancelled;
+  int MPI_SOURCE;
+  int MPI_TAG;
+  int MPI_ERROR;
+} MPI_Status;
+```
+
+- status主要显示接收函数的各种错误状态，我们通过访问status.MPI_SOURCE，status.MPI_TAG和status.MPI_ERROR就可以得到发送数据进程号，发送数据使用的tag以及本接收操作返回的错误代码。当然如果想要获取数据项数，笔者尝试了一下，好像通过`status.count`无法获取，需要通过MPI函数`MPI_Get_count`获得。
+
+#### **MPI_Get_count**
+
+其标准定义为：
+
+`int MPI_Get_count(MPI_Status *status, MPI_Datatype datatype, int *count);`
+
+其中前两个参数为输入参数，status是MPI_Recv返回的状态结构的指针，datatype指定数据类型，最后一个参数是输出参数，是实际接收到的给顶数据类型的数据项数。
+
+笔者测试的程序如下，确实获得了实际收到的个数。
+
+```
+#include"mpi.h"
+#include<stdio.h>
+#include<string.h>
+
+#define MAXLEN 512
+
+int main(int argc, char* argv[]) {
+  int myid, namelen, numprocs;
+  char buffer[MAXLEN], pro_name[MPI_MAX_PROCESSOR_NAME];
+  MPI_Status status;
+  MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+    MPI_Get_processor_name(pro_name, &namelen);
+    printf("myid %d of %d running on %s\n", myid, numprocs, pro_name);
+    if(myid == 0) {
+      strcpy(buffer, "hello world");
+      printf("processor 0 sending message: %s\n", buffer);
+      fflush(stdout);
+      MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, 3, 110, MPI_COMM_WORLD);
+      printf("send %d data\n", strlen(buffer)+1);
+      fflush(stdout);
+    }
+    if(myid == 3) {
+      MPI_Recv(buffer, MAXLEN, MPI_CHAR, 0, 110, MPI_COMM_WORLD, &status);
+      printf("processor 3 received message: %s\n", buffer);
+      fflush(stdout);
+      int count;
+      MPI_Get_count(&status, MPI_CHAR, &count);
+      printf("the data num is %d\n", count);
+    }
+  MPI_Finalize();
+  return 0;
+}
+```
+这里的count其实本质上是需要根据数据类型变化的，MPI_DOUBLE,MPI_INT,MPI_CHAR对于同一长度的数据所能存储的数据个数是不一样的，这与C是一样的。
+
+上面的点对点通信的例子，对应上面MPMD中的流式模型，即进程i等待进程i-1传递过来的字符串，并将其传递给进程i+1，直到最后一个进程传递给进程0。
