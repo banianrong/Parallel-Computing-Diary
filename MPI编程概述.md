@@ -773,3 +773,48 @@ int main(int argc, char* argv[]) {
 这里的count其实本质上是需要根据数据类型变化的，MPI_DOUBLE,MPI_INT,MPI_CHAR对于同一长度的数据所能存储的数据个数是不一样的，这与C是一样的。
 
 上面的点对点通信的例子，对应上面MPMD中的流式模型，即进程i等待进程i-1传递过来的字符串，并将其传递给进程i+1，直到最后一个进程传递给进程0。
+
+## **消息管理7要素**
+
+mpi最重要的功能就是消息传递，MPI_Send和MPI_Recv负责在两个进程之间接收信息和发送信息。主要由以下7个参数构成。
+
+- 发送或者接收缓冲区buf
+- 数据数量count
+- 数据类型datatype
+- 目标进程或者源进程destination/source
+- 消息标签tag
+- 通信域comm
+- 消息状态status，只在接收的函数中出现
+
+**消息信封**
+MPI程序中的消息传递和我们日常的邮件发送和传递有类似之处，其中buf，coutn，datatype是信件的内容，而source/destination，tag，comm是信件的信封，因此我们称之为消息信封。
+
+### **消息数据类型**
+
+消息数据类型，就是之前所说的datatype
+
+#### **作用**
+- 方便将非连续内存中的数据，以及具有不同数据类型的内容组成消息
+- 其类型匹配非常严格，一是宿主语言(如C)数据类型和通信操作的数据类型匹配，同时发送方和接收方的数据类型匹配
+
+#### **基本数据类型**
+
+以下给出了MPI预定义数据类型与C数据类型的对应关系
+
+|MPI预定义数据类型|相应的C数据类型|
+|:--------------:|:------------:|
+|`MPI_CHAR`|`signed char`|
+|`MPI_SHORT`|`signed short int`|
+|`MPI_INT`|`signed int`|
+|`MPI_LONG`|`signed long int`|
+|`MPI_UNSIGNED_CHAR`|`unsigned char`|
+|`MPI_UNSIGNED_SHORT`|`unsigned short int`|
+|`MPI_UNSIGNED`|`unsigned int`|
+|`MPI_UNSIGNED_LONG`|`unsigned long int`|
+|`MPI_FLOAT`|`float`|
+|`MPI_DOUBLE`|`double`|
+|`MPI_LONG_DOUBLE`|`long double`|
+|`MPI_BYTE`|无对应类型|
+|`MPI_PACKED`|无对应类型|
+
+基本上就是`MPI+datatype`的结构
