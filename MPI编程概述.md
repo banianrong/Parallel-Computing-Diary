@@ -818,3 +818,213 @@ MPI程序中的消息传递和我们日常的邮件发送和传递有类似之�
 |`MPI_PACKED`|无对应类型|
 
 基本上就是`MPI+datatype`的结构
+
+一开始的时候建议尽可能地保证发送和接收地数据类型完全一致。
+
+这里面的多出来的`MPI_BYTE`和`MPI_PACKED`，可以与任意以字节为单位的消息相匹配。MPI_BYTE是将消息不加修改的通过二进制字节流来传递的一种方式，而MPI_PACKED是为了将非连续的数据进行打包发送而提出的。经常与函数`MPI_Pack_size`和`MPI_Pack`联合使用。
+
+下面是MPI_PACKED的使用代码：
+
+```
+#include"mpi.h"
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+
+#define MAXLEN 512
+
+int main() {
+  int myid, namelen;
+  MPI_Status status;
+  char name[MPI_MAX_PROCESSOR_NAME], buf[MAXLEN];
+  MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Get_processor_name(name, &namelen);
+    printf("processor %d is started on %s\n", myid, name);
+    if(myid == 0) {
+        double A[100];
+        int buffersize;
+        MPI_Pack_size(50, MPI_DOUBLE, MPI_COMM_WORLD, &buffersize);
+        void* tempbuffer = malloc(buffersize);
+        int j = sizeof(MPI_DOUBLE);
+        int position = 0;
+        for(int i = 0; i < 100; i++) A[i] = i * 1.1;
+        printf("position : %d\n", position);
+        for(int i = 0; i < 50; i++)
+          MPI_Pack(A+i*2, 1, MPI_DOUBLE, tempbuffer, buffersize, &position, MPI_COMM_WORLD);
+        MPI_Send(tempbuffer, position, MPI_PACKED, 1, 101, MPI_COMM_WORLD);
+        free(tempbuffer);
+    }
+    if(myid == 1) {
+      void* B = malloc(MAXLEN);
+      MPI_Recv(B, MAXLEN, MPI_PACKED, 0, 101, MPI_COMM_WORLD,&status);
+      int num;
+      MPI_Get_count(&status, MPI_PACKED, &num);
+      printf("%d\n", num);
+      double* C = (double*)B;
+      for(int i = 0; i < 50; i++) {
+        printf("%lf\n", C[i]);
+      }
+      free(B);
+    }
+  MPI_Finalize();
+  return 0;
+}
+```
+
+- `MPI_Pack_size`
+  - 决定需要多大的缓冲区来存放数据
+  - `MPI_Pack_size(num, datatype, comm, buffersize)`
+  - 这里是通过MPI_Pack_size来计算num个datatype数据所需要的内存，其结果存放在buffersize，注意buffersize给的是整型指针，comm就是通信域
+
+- `MPI_Pack`
+  - `MPI_Pack(buf, sum, datatype, tempbuffer, buffersize, &position, comm)`
+  - buf是所要打包的数据的起始位置(指针or地址)，第二个参数是打包几个数据，第三个参数是说这回的数据的种类，第四个参数tempbuffer是要打包的地方，buffersize是缓冲区大小，第五个参数用于跟踪已经有多少个数据被打包(同时也作为地址偏移量，本质上也是第一个数据开始存放的地方)，第六个就是通信域
+
+##### **导出数据类型**
+ MPI还允许通过导出数据类型，将不连续的，甚至是不同类型的数据元素组合在一起形成新的数据类型。我们称这种由用户定义的数据类型为到此处数据类型。这需要由MPI提供的构造函数来构造。
+
+ 总之类型匹配规则如下：
+
+ - 有类型数据的通信，发送方和接收方均使用相同的数据类型
+ - 无类型数据的通信，发送方和接收方均以MPI_BYTE作为数据类型
+ - 打包数据的通信，发送方和接收方均使用MPI_PACKED
+
+
+ ### **消息标签TAG**
+
+TAG是消息信封中的一项，是程序在同一接收者的情况下，用于标识不同类型消息的一个整数。
+
+```
+#include"mpi.h"
+#include<stdio.h>
+#include<string.h>
+
+#define MAXN 512
+
+int main() {
+  int myid, namelen;
+  char processor_name[MPI_MAX_PROCESSOR_NAME];
+  MPI_Status status;
+  MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Get_processor_name(processor_name, &namelen);
+    printf("processor %d running on %s\n", myid, processor_name);
+    if(myid == 0) {
+      char message[MAXN];
+      strcpy(message, "hello, I'm processor 0\n");
+      printf("processor 0 sending message: %s", message);
+      fflush(stdout);
+      MPI_Send(message, strlen(message)+1, MPI_CHAR, 2, 101, MPI_COMM_WORLD);
+      strcpy(message, "goodbye, I'm processor 0\n");
+      printf("processor 0 sending message: %s", message);
+      fflush(stdout);
+      MPI_Send(message, strlen(message)+1, MPI_CHAR, 2, 110, MPI_COMM_WORLD);
+    }
+    if(myid == 2) {
+      char message[MAXN];
+      MPI_Recv(message, MAXN, MPI_CHAR, 0, 101, MPI_COMM_WORLD, &status);
+      printf("processor 2 received message: %s", message);
+      fflush(stdout);
+      MPI_Recv(message, MAXN, MPI_CHAR, 0, 110, MPI_COMM_WORLD, &status);
+      printf("processor 2 received message: %s", message);
+      fflush(stdout);
+    }
+  MPI_Finalize();
+  return 0;
+}
+```
+
+如果上述的例子假设没有标签的化，那么有可能进程0发送的第二个信息如果比第一个信息块，那么进程2接收的就是第二个信息，如果此时存储的地方不一样，就会导致消息沟通的错误，所以我们需要消息标签来进行区别。
+
+### **通信域**
+
+消息的发送和接收必须使用相同的消息标签才能实施通信。维护TAG来匹配消息是比较繁琐的事情，因此我们同时提出了另一项通信域。
+
+一个通信域包含一个进程组及其上下文。进程组是进程的有限有序集。有限是说进程的数量是有限的，有序是编号是从0~n-1。
+
+通信域限定了消息传递的进程范围。
+
+一个进程在一个通信组中，用它的编号进行标识，组的大小和进程号可以用前面所说的`MPI_Comm_size`和`MPI_Comm_rank`获得。
+
+MPI预先定义了两个进程组：MPI_COMM_SELF(只包含自己的通信域)和MPI_COMM_WORLD(包含所有MPI进程的进程组)，同时，MPI对于通信子(通信组)提供了各种管理函数。
+
+- `int MPI_Comm_compare(comm1, comm2, result)`
+
+其中result是整型指针的传递，这里比较comm1和comm2，如果comm1和comm2是相同的句柄，则result为MPI_Ident(感觉上是一个整型，但是实测的时候没法打印，反正该函数通过result值得不同来表示结果)，如果仅仅是个进程组得成员和序列号都相同，则result为MPI_Congruent，如果两者得组成员相同但序列号不同则结果为MPI_Similar，否则结果就为MPI_Unequal
+
+- `int MPI_Comm_dup(comm, newcomm)`
+
+对comm进行复制得到新的通信域newcomm，注意这边得newcomm是通过指针传递的，类型为MPI_Comm*
+
+- `int MPI_Comm_solit(comm, color, key, newcomm)`
+
+通信域分裂，本函数要求comm进程组中的每个进程都要执行，每个进程指定一个color(整型)，如果具有相同的color值的进程形成一个新的进程组，新产生的通信域与这些进程组一一对应。
+
+```
+#include"mpi.h"
+#include<stdio.h>
+#include<string.h>
+
+#define MAXN 512
+
+int main() {
+  MPI_Comm a;
+  MPI_Status status;
+  int myid, numprocs;
+  MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    printf("MPI_COMM_WORLD:%d\n", myid);
+    MPI_Comm_split(MPI_COMM_WORLD, myid%2, myid, &a);
+    MPI_Comm_size(a, &numprocs);
+    printf("%d\n", numprocs);
+    MPI_Comm_rank(a, &myid);
+    printf("a:%d\n", myid);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    if(myid == 0) {
+       char buf[MAXN];
+       strcpy(buf, "hello world from 0\n");
+       printf("processor 0 sending : %s", buf);
+       MPI_Send(buf, strlen(buf)+1, MPI_CHAR, 1, 110, a);
+    }
+    if(myid == 2) { // 这里发现0和2是一组，0和3不是一组
+      char buf[MAXN];
+      MPI_Recv(buf, MAXN, MPI_CHAR, 0, 110, a, &status);
+      printf("%s", buf);
+    }
+  MPI_Finalize();
+  return 0;
+}
+```
+
+注意新产生的通信域包含旧的所有进程，只是不同的进程可能在不同的组别之中。新的进程组中，各个进程的顺序编号根据key(整型)的大小决定，如果key越小，则相应进程在新通信域中的顺序编号也越小，如果key值相同，则根据这两个进程在原来通信域中顺序号决定新的进程号。一个进程可能提供color值为MPI_Undefined，此时，newcomm返回MPI_COMM_NULL(分裂失败)
+
+- `int MPI_Comm_free(comm)`
+
+释放给定的通信域，注意这里传递的是指针
+
+### **状态字(status)**
+
+状态字的主要功能就是保存接收到的消息的状态。
+
+```
+while(true) {
+  MPI_Recv(..., ..., ..., MPI_ANY_SOURCE, MPI_ANY_TAG,...,...);
+  switch(status.MPI_TAG) {
+    case 0: ...;
+    case 1: ...;
+    case 2: ...;
+  }
+}
+```
+
+这里的MPI_Recv没有指定从哪里接收信息，可以接收任意来源的信息，任意标签的信息(MPI_ANY_TAG)，我们可以通过检查status中的MPI_TAG可以有效把消息区分开来。当一个接收者能从不同进程接收不同大小和标签的消息时，比如服务器进程，查阅状态信息就会很有用。我们可以利用状态字的标签可以进行更多的有意思的操作。
+
+### **通信匹配圣经**
+
+ - 通信数据类型匹配
+ - 消息标签，通信域匹配
+ - 发送进程与接收进程号对应
+ - 接收消息的缓冲区大于发送过来的消息的大小
+
+ 现在考虑如果当初的信息大家都是先接收然后再发送，程序会怎么样呢？运行后会发现，程序进入了停滞状态，此时0，1，2，3都是在receiving状态，而这时候没有进程可以发送消息来结束这个状态，**这种大家都在等待的状态，称为“死锁”**，死锁现象在多进程，多线程编程中是经常发生的现象。 因为MPI_Send或MPI_Recv正确返回的前提是该通信操作已经完成。对于发送操作来说就是缓冲区可以被其他的操作更新，对于接收操作来说就是该缓冲区中的数据已经可以被完整的使用。我们称这样的形式为阻塞通信，如果没有完成之前，其不会结束该次通信操作。当然反过来，先发送再接收是可以执行下去的，因为发送操作不需要等待其他的先行操作，因此阻塞可以是有限的。阻塞通信中点对点消息的匹配也对正确通信有着至关重要的影响。
