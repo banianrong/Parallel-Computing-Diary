@@ -1028,3 +1028,212 @@ while(true) {
  - 接收消息的缓冲区大于发送过来的消息的大小
 
  现在考虑如果当初的信息大家都是先接收然后再发送，程序会怎么样呢？运行后会发现，程序进入了停滞状态，此时0，1，2，3都是在receiving状态，而这时候没有进程可以发送消息来结束这个状态，**这种大家都在等待的状态，称为“死锁”**，死锁现象在多进程，多线程编程中是经常发生的现象。 因为MPI_Send或MPI_Recv正确返回的前提是该通信操作已经完成。对于发送操作来说就是缓冲区可以被其他的操作更新，对于接收操作来说就是该缓冲区中的数据已经可以被完整的使用。我们称这样的形式为阻塞通信，如果没有完成之前，其不会结束该次通信操作。当然反过来，先发送再接收是可以执行下去的，因为发送操作不需要等待其他的先行操作，因此阻塞可以是有限的。阻塞通信中点对点消息的匹配也对正确通信有着至关重要的影响。
+
+
+ ### **统计时间**
+
+ 编写并行程序的目的是为了提高程序运行性能。为了检验并行化的效果，我们经常会用到统计时间的函数。MPI提供两个时间函数`MPI_Wtime`和`MPI_Wtick`
+
+ - `MPI_Wtime`返回一个双精度数，标识从过去的某点时间到当前时间所消耗的时间秒数
+
+ - `MPI_Wtick`返回`MPI_Wtime`结果的精度
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main(int argc, char* argv[]) {
+   int myid, numprocs, next, namelen;
+   char buffer[BUFLEN], processor_name[MPI_MAX_PROCESSOR_NAME];
+   MPI_Status status;
+   double t1, t2, t3, tick;
+
+   MPI_Init(&argc, &argv);
+   MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+   MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+   MPI_Get_processor_name(processor_name, &namelen);
+
+   t1 = MPI_Wtime();
+
+   printf("Processor %d on %s\n", myid, processor_name);
+   printf("Processor %d of %d\n", myid, numprocs);
+   memset(buffer, 0, BUFLEN*sizeof(char));
+   if(myid == numprocs-1)
+     next = 0;
+   else
+     next = myid + 1;
+
+   if(myid == 0) {
+     strcpy(buffer, "hello there");
+     printf("%d sending '%s'\n", myid, buffer); fflush(stdout);
+     MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD);
+     printf("%d receiving\n", myid); fflush(stdout);
+     MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);
+     printf("%d received '%s'\n", myid, buffer); fflush(stdout);
+   }else{
+     printf("%d receiving\n", myid); fflush(stdout);
+     MPI_Recv(buffer, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, 99, MPI_COMM_WORLD, &status);
+     printf("%d received '%s'\n", myid, buffer); fflush(stdout);
+     MPI_Send(buffer, strlen(buffer)+1, MPI_CHAR, next, 99, MPI_COMM_WORLD);
+     printf("%d sent '%s'\n", myid, buffer); fflush(stdout);
+   }
+
+   t2 = MPI_Wtime();
+   t3 = t2 - t1;
+   tick = MPI_Wtick();
+   printf("%d process time is '%.10f'\n", myid, t3);
+   printf("%d process tick is '%.10f'\n", myid, tick);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 其实本质上和前面的时钟打点函数的用法差不多，这里MPI_Wtime就是获得程序当前运行了多少时间，而MPI_Wtick就是获得计时的精度。
+
+
+ ### **错误管理**
+
+ - 通过`status.MPI_ERROR`来获取错误码
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main() {
+   int myid;
+   MPI_Status status;
+   char buf[BUFLEN];
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     printf("processor %d running\n", myid);
+     if(myid == 0) {
+       strcpy(buf, "hello, processor 1 from processor 0");
+       printf("processor %d sending %s\n", myid, buf); fflush(stdout);
+       MPI_Send(buf, strlen(buf)+1, MPI_CHAR, 1, 101, MPI_COMM_WORLD);
+     }
+     if(myid == 1) {
+       MPI_Recv(buf, BUFLEN, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+       printf("processor %d received %s\n", myid, buf); fflush(stdout);
+       printf("tag %d source %d\n", status.MPI_TAG, status.MPI_SOURCE);
+       printf("error code %d\n", status.MPI_ERROR);
+     }
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ - MPI终止MPI程序执行的函数`MPI_Abort`
+
+ `int MPI_Abort(MPI_Comm, int errorcode)`
+
+ 该函数的作用使通信域comm的所有进程退出，返回errorcode给调用的环境。通信域comm中的任意进程调用此函数都能使该通信域内所有的进程结束运行。这里只要执行到这个代码，那么所有的进程都会结束，类似于抛出异常的处理机制。
+
+ 接下来进入本章的最后一个环节啦，加油。
+
+ ## **MPI群集通信**
+
+ 除了之前介绍的点对点通信，MPI还有群集通信。群集通信，说白了就是包含一对多，多对一，多对多的进程通信模式(就是不带一对一玩，但其实本质上就是多对多，因为一对多和多对一不过是多对多的特例)。此时的通信方式变成了多个进程参与通信。
+
+ ### **同步**
+
+ `int MPI_Barrier(MPI_Comm comm)`
+
+ 如下面这段代码，如果没有MPI_Barrier，那么进程运行快的会直接执行下面的代码，而有的进程还没有执行第一行的输出。
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+
+ int main() {
+   int myid;
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     printf("processor %d running\n", myid); fflush(stdout);
+     MPI_Barrier(MPI_COMM_WORLD);
+     printf("hello world %d\n", myid); fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 这个函数就像是一道路障。使得通信子comm中的所有进程相互同步，知道所有的进程都执行了他们各自的MPI_Barrier函数，然后各自开始执行后面的代码。同步函数是并行程序中控制执行顺序的常用手段。(本质上就是强迫所有在通信子comm中的进程，重新在Barrier那一行一起进行，让某些线程达到同步，此时有点串行的味道)
+
+ ### **广播**
+
+ 广播就是一对多的传送消息，从一个root进程向组内所有其他的进程发送一条消息。
+
+ `int MPI_Bcast(void* buffer, int count, MPI_Datatype datatype, int root,MPI_Comm)`
+
+ 相比于之前的MPI_Send，MPI_Bcast就是少了目标进程，此时的目标进程扩大为组内的所有进程。
+
+ ### **聚集**
+
+ `int MPI_Gather(void* sendbuf, int sendcnt, MPI_Datatype sendtype, void* recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)`
+
+ 该函数的作用就是root进程接收该通信组每一个成员进程(包括root自己)发送的信息。这n个消息的连接按进程号排列存放在root进程的接收缓冲中。每个缓冲由三元组(sendbuf, sendcnt, sendtype)标识。所有非root进程忽略接收缓冲。跟多的是接收的作用，只不过此时接收的是其他进程中发送过来的信息。
+
+ ### **播撒**
+
+ `int MPI_Scatter(void* sendbuf, int sendcnt, MPI_Datatype sendtype, void* recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)`
+
+ MPI_scatter是一对多传递消息。和广播不同的是，root进程向各个进程传递的消息可以是不同的。Scatter实际上执行的是与Gather相反的操作。
+
+
+
+
+ 相关代码如下：
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<math.h>
+
+ double f(double);
+
+ double f(double a) {
+     return (4.0 / (1.0 + a*a));
+ }
+
+ int main(int argc, char* argv[]) {
+     int n, myid, numprocs, i;
+     double PI25DT = 3.141592653589793238462643;
+     double mypi, pi, h, sum, x;
+     double starttime = 0.0, endwtime;
+     int namelen;
+     char processor_name[MPI_MAX_PROCESSOR_NAME];
+
+     MPI_Init(&argc, &argv);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Get_processor_name(processor_name, &namelen);
+
+     fprintf(stdout, "Process %d of %d is on %s\n", myid, numprocs, processor_name);
+     fflush(stdout);
+     n = 10000;
+     if(myid == 0)
+       starttime = MPI_Wtime();
+     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+     h = 1.0/(double)n;
+     sum = 0.0;
+     for(i = myid+1; i <= n; i += numprocs){
+       x = h * ((double)i - 0.5);
+       sum += f(x);
+     }
+     mypi = h * sum;
+     MPI_Reduce(&mypi, &pi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+     if(myid == 0) {
+       endwtime = MPI_Wtime();
+       printf("pi is approximately %.16f, Error is %.16f\n", pi, fabs(pi-PI25DT));
+       printf("wall clock time = %f\n", endwtime-starttime);
+       fflush(stdout);
+     }
+     MPI_Finalize();
+     return 0;
+ }
+ ```
