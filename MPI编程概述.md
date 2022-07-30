@@ -1136,6 +1136,7 @@ while(true) {
 
  接下来进入本章的最后一个环节啦，加油。
 
+
  ## **MPI群集通信**
 
  除了之前介绍的点对点通信，MPI还有群集通信。群集通信，说白了就是包含一对多，多对一，多对多的进程通信模式(就是不带一对一玩，但其实本质上就是多对多，因为一对多和多对一不过是多对多的特例)。此时的通信方式变成了多个进程参与通信。
@@ -1172,11 +1173,71 @@ while(true) {
 
  相比于之前的MPI_Send，MPI_Bcast就是少了目标进程，此时的目标进程扩大为组内的所有进程。
 
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main() {
+   int myid, numprocs, namelen;
+   char buf[BUFLEN], Buf[BUFLEN], name[MPI_MAX_PROCESSOR_NAME];
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Get_processor_name(name, &namelen);
+     printf("%d of %d running on %s\n", myid, numprocs, name); fflush(stdout);
+     memset(buf, 0, sizeof(buf));
+     memset(Buf, 0, sizeof(Buf));
+     if(myid == 0) {
+       strcpy(buf, "hello, I\'m processor 0\n");
+     }
+     printf("processor %d\'s buf : %s", myid, buf); fflush(stdout);
+     printf("\nMPI_Bcast is started\n"); fflush(stdout);
+     if(myid == 0) MPI_Bcast(buf, strlen(buf)+1, MPI_CHAR, 0, MPI_COMM_WORLD);
+     MPI_Bcast(Buf, BUFLEN, MPI_CHAR, 0, MPI_COMM_WORLD);
+     printf("processor %d\'s now buf : %s", myid, Buf); fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 用法如上，本质上和Recv和Send很相似，不过没有了tag，同时MPI_Bcast广播本身可以做发送和接收，如果当前进程号等于root，那就是发送，否则就是接收。
+
  ### **聚集**
 
  `int MPI_Gather(void* sendbuf, int sendcnt, MPI_Datatype sendtype, void* recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)`
 
  该函数的作用就是root进程接收该通信组每一个成员进程(包括root自己)发送的信息。这n个消息的连接按进程号排列存放在root进程的接收缓冲中。每个缓冲由三元组(sendbuf, sendcnt, sendtype)标识。所有非root进程忽略接收缓冲。跟多的是接收的作用，只不过此时接收的是其他进程中发送过来的信息。
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main() {
+   int myid, numprocs, namelen;
+   char name[MPI_MAX_PROCESSOR_NAME], buf[BUFLEN], BUF[BUFLEN];
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Get_processor_name(name, &namelen);
+     printf("%d of %d running on %s\n", myid, numprocs, name); fflush(stdout);
+     sprintf(buf, "hello, I\'m processor %d.", myid);
+     printf("%s\n", buf); fflush(stdout);
+     int len = strlen(buf);
+     MPI_Gather(buf, len, MPI_CHAR, BUF, len, MPI_CHAR, 1, MPI_COMM_WORLD);
+     //MPI_Barrier(MPI_COMM_WORLD);
+     printf("processor %d\'BUF is %s\n", myid, BUF); fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ MPI_Gather注意这边的函数sendcnt和recvcnt要匹配。如果不相等可能会造成通信错误，其实质就是运行这些函数的进程开始相互通讯。注意该函数自带有barrier的功能。
 
  ### **播撒**
 
@@ -1184,8 +1245,218 @@ while(true) {
 
  MPI_scatter是一对多传递消息。和广播不同的是，root进程向各个进程传递的消息可以是不同的。Scatter实际上执行的是与Gather相反的操作。
 
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
 
+ #define BUFLEN 512
 
+ int main() {
+   int myid, numprocs, namelen;
+   char processor_name[MPI_MAX_PROCESSOR_NAME], buf[BUFLEN], BUF[BUFLEN];
+   MPI_Status status;
+   MPI_Init(NULL, NULL);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Get_processor_name(processor_name, &namelen);
+     printf("%d of %d running on %s\n", myid, numprocs, processor_name);
+     memset(buf, 0, sizeof(buf));
+     if(myid == 0) strcpy(buf, "hello, I\'m processor 0");
+     printf("processor %d buf %s\n", myid, buf); fflush(stdout);
+     int len = strlen(buf), next = (myid + 1) % numprocs;
+     MPI_Barrier(MPI_COMM_WORLD);
+     if(myid == 0) {
+       MPI_Send(&len, 1, MPI_INT, next, 101,  MPI_COMM_WORLD);
+       MPI_Recv(&len, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+     }else{
+       MPI_Recv(&len, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+       MPI_Send(&len, 1, MPI_INT, next, 101,  MPI_COMM_WORLD);
+     }
+     MPI_Barrier(MPI_COMM_WORLD);
+     printf("processor %d len %d\n", myid, len); fflush(stdout);
+     MPI_Scatter(buf, len/4, MPI_CHAR, BUF, len/4, MPI_CHAR, 0, MPI_COMM_WORLD);
+     printf("processor %d BUF %s\n", myid, BUF); fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 注意方便起见，建议这里的sendcnt和recvcnt保持一直，同时注意这里的recvcnt是表示每个进程接收的数量，而不是发送的总数量，注意这个区别，类似于一种分配块中任务的数量。当然root进程可以给自己发送信息。
+
+ ### **扩展的聚集和播撒操作**
+
+ > `MPI_Allgather`的作用是每一个进程都收集到其他所有进程的消息，它相当于每一个进程都执行了MPI_Gather执行完了MPI_Gather之后，所有的进程的接收缓冲区的内容都是相同的，也就是说每个进程给所有进程都发送了一个相同的消息，所以名为`allgather`。本函数的接口是：
+
+ `int MPI_Allgather(void* sendbuf, int sendcount, MPI_Datatype sendtype, void* recvbuf, int recvcount, MPI_Datatype recvtype, MPI_Comm comm)`
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main() {
+   int myid, numprocs, namelen;
+   char buf[BUFLEN], BUF[BUFLEN], name[MPI_MAX_PROCESSOR_NAME];
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Get_processor_name(name, &namelen);
+     printf("processor %d of %d running on %s\n", myid, numprocs, name);
+     memset(buf, 0, sizeof(buf));
+     memset(BUF, 0, sizeof(BUF));
+     sprintf(buf, "hello, I'm processor %d", myid);
+     MPI_Allgather(buf, strlen(buf), MPI_CHAR, BUF, strlen(buf), MPI_CHAR, MPI_COMM_WORLD);
+     printf("processor %d get message : %s\n", myid, BUF); fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ ### **全局交换**
+
+ > `MPI_Allgather`每个进程发送一个相同的消息给所有的进程，而`MPI_Alltoall`散发给不同进程的消息是不同的。因此，它的发送缓冲区也是一个数组。`MPI_Alltoall`的每个进程可以向每个接收者发送数目不同的数据，第i个进程发送的第j块数据将被第j 个进程接收并存放在其他消息缓冲区recvbuf的第i块，每个进程的sendcount和sendtype的类型必须和所有其他进程的recvcount和recvtype相同，这也意味着在每个进程和根进程之间发送的数据量必须和接收的数据量相等。函数接口为：
+
+ `int MPI_Alltoall(void* sendbug, int sendcount, MPI_Datatype sendtype, void* recvbuf, int recvcount, MPI_Datatype, MPI_Comm comm)`
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<string.h>
+
+ #define BUFLEN 512
+
+ int main() {
+   int myid, numprocs, namelen;
+   char processor_name[MPI_MAX_PROCESSOR_NAME], buf[BUFLEN], BUF[BUFLEN];
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     MPI_Get_processor_name(processor_name, &namelen);
+     printf("%d of %d running on %s\n", myid, numprocs, processor_name); fflush(stdout);
+     sprintf(buf, "I\'m processor %d, hello!", myid);
+     printf("processor %d : %s\n", myid, buf); fflush(stdout);
+     memset(BUF, 0, sizeof(BUF));
+     int len = strlen(buf);
+     MPI_Alltoall(buf, len/numprocs, MPI_CHAR, BUF, len/numprocs, MPI_CHAR, MPI_COMM_WORLD);
+     printf("processor %d get message: %s\n", myid, BUF);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ ### **规约与扫描**
+
+ MPI提供了两种类型的聚合操作
+
+ #### **规约**
+
+ `int MPI_Reduce(void* sendbuf, void* recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm)`
+
+ 这里的每个进程的待处理数据存放在sendbuf中，可以是标量也可以是向量。所有进程将这些值通过输入的操作子op计算为最终结果并将它存入root进程的recvbuf中。具体的规约操作包括：
+
+ |操作子|功能|
+ |:---:|:--:|
+ |`MPI_MAX`|求最大值|
+ |`MPI_MIN`|求最小值|
+ |`MPI_SUM`|求和|
+ |`MPI_PROD`|求积|
+ |`MPI_LAND`|逻辑与|
+ |`MPI_BAND`|按位与|
+ |`MPI_LOR`|逻辑或|
+ |`MPI_BOR`|按位或|
+ |`MPI_LXOR`|逻辑异或|
+ |`MPI_BXOR`|按位异或|
+ |`MPI_MAXLOC`|最大值且对应的位置|
+ |`MPI_MINLOC`|最小值且相应的位置|
+
+ 规约操作的数据类型与C中的整数类型对应。
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<time.h>
+ #include<stdlib.h>
+ #include<string.h>
+
+ #define LEN 10
+ #define BASE 1000
+
+ int main() {
+   int myid, numprocs, num[LEN], out[LEN];
+   srand(time(NULL));
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     for(int i = 0; i < LEN; i++) num[i] = 10*myid + i;
+     printf("processor %d array: ", myid);
+     for(int i = 0; i < LEN; i++) printf("%d ", num[i]);
+     printf("\n");fflush(stdout);
+     memset(out, 0, sizeof(out));
+     MPI_Barrier(MPI_COMM_WORLD);
+     MPI_Reduce(&num, &out, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+     printf("processor %d array:", myid);
+     if(out[0] == 0) printf("no\n");
+     else{
+       for(int i = 0; i < 10; i++) printf("%d ", out[i]);
+       printf("\n");
+     }
+     fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 注意这里的数据量count指的是几个数据参加，而这边的操作其实是对所有线程的第i个数据进行的，所以传递的时候接收的就是经历这些操作过后留下来的数据。化多线程为一个线程上的数据，归一。
+
+ #### **扫描**
+
+ `int MPI_Scan(void* sendbuf, void* recvbuf, int count, MPI_Datatype, MPI_Op op, MPI_Comm comm)`
+
+ MPI_Scan常用于对分布于族中的数据做前置规约操作。此操作将序列号为0,...,i(包括i)的进程发送缓冲区的规约结果存入序列号为i的进程接收消息缓冲区中。这种操作支持的数据类型，操作以及对发送及接收缓冲区的限制和规约相同。与规约相比，扫描操作设过去了root域，因为扫描是将部分值组合成n个最终值，并存放在n个进程的recvbuf中。具体的扫描操作有Op域定义。
+
+ MPI的规约和扫描操作允许每个进程贡献向量值，而不只是标量值。向量的长度由Count定义。
+
+ ```
+ #include"mpi.h"
+ #include<stdio.h>
+ #include<time.h>
+ #include<stdlib.h>
+ #include<string.h>
+
+ #define LEN 10
+ #define BASE 1000
+
+ int main() {
+   int myid, numprocs, num[LEN], out[LEN];
+   srand(time(NULL));
+   MPI_Init(NULL, NULL);
+     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+     for(int i = 0; i < LEN; i++) num[i] = 10*myid + i+1;
+     printf("processor %d array: ", myid);
+     for(int i = 0; i < LEN; i++) printf("%d ", num[i]);
+     printf("\n");fflush(stdout);
+     memset(out, 0, sizeof(out));
+     MPI_Barrier(MPI_COMM_WORLD);
+     MPI_Scan(&num, &out, 10, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+     printf("processor %d array:", myid);
+     if(out[0] == 0) printf("no\n");
+     else{
+       for(int i = 0; i < 10; i++) printf("%d ", out[i]);
+       printf("\n");
+     }
+     fflush(stdout);
+   MPI_Finalize();
+   return 0;
+ }
+ ```
+
+ 与规约是类似的不过就是这里的最终结果一定存放在最后一个进程中，同时注意随着进程号的迭代，里面的进程中的最后一个存放当前的结果。比如对于四进程来说，第二个进程存放一二进程中op操作子过后的值。
+
+ ### **简单示例**
 
  相关代码如下：
 
@@ -1237,3 +1508,18 @@ while(true) {
      return 0;
  }
  ```
+
+ 这里本质上利用的是积分求pi，1/(1+x^2)的积分是arctanx，通过这种方式来实现。最后通过规约操作中的求和将四个线程的内容相加就可以了，也就是将其中的操作基本上分成四等分，然后来求解。
+
+ ### **小结**
+
+ - 通信子中的所有进程必须调用群集通信历程。如果有意个进程没有调用，会产生奇奇怪怪的错误。
+ - 一个进程一旦结束了群集操作就从群集例程中返回。
+ - 每个群集历程，也就是前面的群集函数都有阻塞的功能
+
+ ****
+ MPI入门到此ending。完结撒花，感谢陪伴。
+
+ > 何当共剪西窗烛，却话巴山夜雨时。
+
+ 江湖再会，哈哈哈。
